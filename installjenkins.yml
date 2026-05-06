@@ -1,31 +1,59 @@
 ---
-- name: Instalação do Jenkins
+- name: Instalação do Jenkins com Java 21 (Temurin)
   hosts: all
   become: true
 
   tasks:
-    - name: Instalar dependências
+    - name: Instalar dependências básicas
       apt:
         name:
           - apt-transport-https
           - ca-certificates
           - curl
-          - gnupg2
+          - gnupg
           - fontconfig
-          - openjdk-17-jdk
           - software-properties-common
+        state: present
+        update_cache: yes
+
+    - name: Criar diretório para keyrings
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+
+    - name: Adicionar chave GPG do Adoptium
+      get_url:
+        url: https://packages.adoptium.net/artifactory/api/gpg/key/public
+        dest: /etc/apt/keyrings/adoptium.asc
+        mode: '0644'
+
+    - name: Adicionar repositório Adoptium
+      apt_repository:
+        repo: "deb [signed-by=/etc/apt/keyrings/adoptium.asc] https://packages.adoptium.net/artifactory/deb bookworm main"
+        state: present
+
+    - name: Atualizar cache após adicionar Adoptium
+      apt:
+        update_cache: yes
+
+    - name: Instalar Java 21 (Temurin)
+      apt:
+        name: temurin-21-jre
         state: present
 
     - name: Adicionar chave GPG do Jenkins
-      apt_key:
+      get_url:
         url: https://pkg.jenkins.io/debian-stable/jenkins.io-2026.key
-        state: present
+        dest: /etc/apt/keyrings/jenkins.asc
+        mode: '0644'
 
     - name: Adicionar repositório do Jenkins
       apt_repository:
-        repo: deb https://pkg.jenkins.io/debian-stable binary/
+        repo: "deb [signed-by=/etc/apt/keyrings/jenkins.asc] https://pkg.jenkins.io/debian-stable binary/"
         state: present
-    - name: Atualizar cache de pacotes
+
+    - name: Atualizar cache final
       apt:
         update_cache: yes
 
@@ -34,8 +62,12 @@
         name: jenkins
         state: present
 
-    - name: Iniciar e habilitar serviço do Jenkins
+    - name: Garantir que Jenkins está ativo
       systemd:
         name: jenkins
         state: started
         enabled: yes
+      register: jenkins_status
+      until: jenkins_status is succeeded
+      retries: 5
+      delay: 10
