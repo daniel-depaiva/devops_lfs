@@ -2,16 +2,16 @@ pipeline {
     agent any
 
     environment {
-        // Namespace do seu Docker Hub
+        // Namespace fixo do seu Docker Hub para evitar o erro 'null'
         DOCKER_USER  = "danielprodrigues"
         TAG          = "latest"
         
-        // Definição clara das imagens evitando o erro 'null'
+        // Definição clara das imagens utilizando a variável declarada acima
         IMAGE_WEB    = "${DOCKER_USER}/web:${TAG}"
         IMAGE_DB     = "${DOCKER_USER}/db:${TAG}"
         IMAGE_NGINX  = "${DOCKER_USER}/nginx:${TAG}"
         
-        // Caminho padrão do seu arquivo compose (ajuste se estiver em outra pasta)
+        // Nome padrão do arquivo docker compose
         COMPOSE_FILE = "docker-compose.yml" 
     }
 
@@ -29,7 +29,7 @@ pipeline {
                 slackSend channel: '#ci-devops', message: "Build das imagens iniciado", tokenCredentialId: 'slack-token'
 
                 script {
-                    // O ID 'dockerhub' deve ser o ID da credencial criada no Jenkins (Username with password)
+                    // Autentica no Docker Hub usando a sua credencial salva no Jenkins
                     docker.withRegistry('', 'dockerhub') {
                         docker.build(IMAGE_WEB,   "-f Dockerfileweb .").push()
                         docker.build(IMAGE_DB,    "-f Dockerfiledb .").push()
@@ -79,7 +79,6 @@ pipeline {
 
                 script {
                     docker.withRegistry('', 'dockerhub') {
-                        // Garantindo que o compose use o arquivo correto no deploy
                         sh """
                             docker compose -f ${COMPOSE_FILE} pull
                             docker compose -f ${COMPOSE_FILE} up -d
