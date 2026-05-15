@@ -2,19 +2,15 @@ pipeline {
     agent any
 
     environment {
-        TAG         = "latest"
-        REGISTRY    = "${env.REGISTRY_URL}"
-
-        IMAGE_WEB   = "${env.IMAGE_WEB}:${TAG}"
-        IMAGE_DB    = "${env.IMAGE_DB}:${TAG}"
-        IMAGE_NGINX = "${env.IMAGE_NGINX}:${TAG}"
-
+        TAG          = "latest"
+        // Removi o REGISTRY aqui para evitar o erro de 'null'
+        IMAGE_WEB    = "${env.IMAGE_WEB}:${TAG}"
+        IMAGE_DB     = "${env.IMAGE_DB}:${TAG}"
+        IMAGE_NGINX  = "${env.IMAGE_NGINX}:${TAG}"
         COMPOSE_FILE = "${env.COMPOSE_FILE}"
-
     }
 
     stages {
-
         stage('Checkout') {
             steps {
                 sh 'echo "Checking out repository..."'
@@ -28,8 +24,8 @@ pipeline {
                 slackSend channel: '#ci-devops', message: "Build das imagens iniciado", tokenCredentialId: 'slack-token'
 
                 script {
-                    //docker.withRegistry("https://${REGISTRY}", 'dockerhub') {
-                      docker.withRegistry('', 'dockerhub') {
+                    // Usando string vazia '' o Jenkins assume o Docker Hub oficial corretamente
+                    docker.withRegistry('', 'dockerhub') {
                         docker.build(IMAGE_WEB,   "-f Dockerfileweb .").push()
                         docker.build(IMAGE_DB,    "-f Dockerfiledb .").push()
                         docker.build(IMAGE_NGINX, "-f Dockerfilenginx .").push()
@@ -76,10 +72,15 @@ pipeline {
             steps {
                 slackSend channel: '#ci-devops', message: "Deploy em produção iniciado...", tokenCredentialId: 'slack-token'
 
-                sh """
-                    docker compose pull
-                    docker compose up -d
-                """
+                script {
+                    // Envolvi o pull em um registry login caso as imagens sejam privadas
+                    docker.withRegistry('', 'dockerhub') {
+                        sh """
+                            docker compose pull
+                            docker compose up -d
+                        """
+                    }
+                }
             }
         }
     }
