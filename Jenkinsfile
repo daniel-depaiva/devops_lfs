@@ -2,20 +2,19 @@ pipeline {
     agent any
 
     environment {
-        // Namespace fixo do seu Docker Hub para evitar o erro 'null'
-        DOCKER_USER  = "danielprodrigues"
-        TAG          = "latest"
-        
-        // Definição clara das imagens utilizando a variável declarada acima
-        IMAGE_WEB    = "${DOCKER_USER}/web:${TAG}"
-        IMAGE_DB     = "${DOCKER_USER}/db:${TAG}"
-        IMAGE_NGINX  = "${DOCKER_USER}/nginx:${TAG}"
-        
-        // Nome padrão do arquivo docker compose
-        COMPOSE_FILE = "docker-compose.yml" 
+        TAG         = "latest"
+        REGISTRY    = "${env.REGISTRY_URL}"
+
+        IMAGE_WEB   = "${env.IMAGE_WEB}:${TAG}"
+        IMAGE_DB    = "${env.IMAGE_DB}:${TAG}"
+        IMAGE_NGINX = "${env.IMAGE_NGINX}:${TAG}"
+
+        COMPOSE_FILE = "${env.COMPOSE_FILE}"
+
     }
 
     stages {
+
         stage('Checkout') {
             steps {
                 sh 'echo "Checking out repository..."'
@@ -29,8 +28,7 @@ pipeline {
                 slackSend channel: '#ci-devops', message: "Build das imagens iniciado", tokenCredentialId: 'slack-token'
 
                 script {
-                    // Autentica no Docker Hub usando a sua credencial salva no Jenkins
-                    docker.withRegistry('', 'dockerhub') {
+                    docker.withRegistry("https://${REGISTRY}", 'dockerhub') {
                         docker.build(IMAGE_WEB,   "-f Dockerfileweb .").push()
                         docker.build(IMAGE_DB,    "-f Dockerfiledb .").push()
                         docker.build(IMAGE_NGINX, "-f Dockerfilenginx .").push()
@@ -77,14 +75,10 @@ pipeline {
             steps {
                 slackSend channel: '#ci-devops', message: "Deploy em produção iniciado...", tokenCredentialId: 'slack-token'
 
-                script {
-                    docker.withRegistry('', 'dockerhub') {
-                        sh """
-                            docker compose -f ${COMPOSE_FILE} pull
-                            docker compose -f ${COMPOSE_FILE} up -d
-                        """
-                    }
-                }
+                sh """
+                    docker compose pull
+                    docker compose up -d
+                """
             }
         }
     }
