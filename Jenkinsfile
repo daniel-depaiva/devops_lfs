@@ -2,19 +2,17 @@ pipeline {
     agent any
 
     environment {
-        TAG         = "latest"
-        // Aqui você deve usar o nome exato que está no print (REGISTRY)
-        REGISTRY     = "${env.REGISTRY}"
-        // Mantenha as outras variáveis..
-        IMAGE_WEB    = "${env.IMAGE_WEB}:${TAG}"
-        IMAGE_DB     = "${env.IMAGE_DB}:${TAG}"
-        IMAGE_NGINX  = "${env.IMAGE_NGINX}:${TAG}"
-        COMPOSE_FILE = "${env.COMPOSE_FILE}"
-
+        TAG          = "latest"
+        // Pegamos os valores diretamente do Jenkins. 
+        // Se estiverem vazios no Jenkins, o pipeline usará o que está após o ?:
+        REGISTRY     = "${env.REGISTRY ?: 'registry.hub.docker.com'}"
+        COMPOSE_FILE = "${env.COMPOSE_FILE ?: 'docker-compose.yml'}"
+        
+        // Não declaramos as imagens aqui para evitar o erro 'null' 
+        // Vamos montá-las dentro dos stages para maior segurança.
     }
 
     stages {
-
         stage('Checkout') {
             steps {
                 sh 'echo "Checking out repository..."'
@@ -25,14 +23,18 @@ pipeline {
 
         stage('Build Images') {
             steps {
-                slackSend channel: '#ci-devops', message: "Build das imagens iniciado", tokenCredentialId: 'slack-token'
-
                 script {
-                    //docker.withRegistry("https://${REGISTRY}", 'dockerhub') {
+                    // Montamos os nomes aqui dentro para garantir que o Jenkins preencheu as variáveis
+                    def webImg   = "${env.IMAGE_WEB}:${TAG}"
+                    def dbImg    = "${env.IMAGE_DB}:${TAG}"
+                    def nginxImg = "${env.IMAGE_NGINX}:${TAG}"
+
+                    slackSend channel: '#ci-devops', message: "Build iniciado para: ${webImg}", tokenCredentialId: 'slack-token'
+
                     docker.withRegistry("https://${REGISTRY}", 'dockerhub') {
-                        docker.build(IMAGE_WEB,   "-f Dockerfileweb .").push()
-                        docker.build(IMAGE_DB,    "-f Dockerfiledb .").push()
-                        docker.build(IMAGE_NGINX, "-f Dockerfilenginx .").push()
+                        docker.build(webImg,   "-f Dockerfileweb .").push()
+                        docker.build(dbImg,    "-f Dockerfiledb .").push()
+                        docker.build(nginxImg, "-f Dockerfilenginx .").push()
                     }
                 }
             }
@@ -40,18 +42,25 @@ pipeline {
 
         stage('Security Scan (Trivy)') {
             steps {
-                slackSend channel: '#ci-devops', message: "Rodando Trivy Scan...", tokenCredentialId: 'slack-token'
+                script {
+                    // Referenciando as variáveis do ambiente global
+                    def webImg   = "${env.IMAGE_WEB}:${TAG}"
+                    def dbImg    = "${env.IMAGE_DB}:${TAG}"
+                    def nginxImg = "${env.IMAGE_NGINX}:${TAG}"
 
-                sh """
-                    trivy image ${IMAGE_WEB}   --severity HIGH,CRITICAL --exit-code 0 --format json --output trivy-web.json
-                    trivy image ${IMAGE_DB}    --severity HIGH,CRITICAL --exit-code 0 --format json --output trivy-db.json
-                    trivy image ${IMAGE_NGINX} --severity HIGH,CRITICAL --exit-code 0 --format json --output trivy-nginx.json
-                """
+                    slackSend channel: '#ci-devops', message: "Rodando Trivy Scan...", tokenCredentialId: 'slack-token'
+
+                    sh """
+                        trivy image ${webImg}   --severity HIGH,CRITICAL --exit-code 0 --format json --output trivy-web.json
+                        trivy image ${dbImg}    --severity HIGH,CRITICAL --exit-code 0 --format json --output trivy-db.json
+                        trivy image ${nginxImg} --severity HIGH,CRITICAL --exit-code 0 --format json --output trivy-nginx.json
+                    """
+                }
             }
             post {
                 always {
                     archiveArtifacts artifacts: 'trivy-*.json', fingerprint: true
-                    slackSend channel: '#ci-devops', message: "Trivy scan concluído. Relatórios disponíveis nos artefatos.", tokenCredentialId: 'slack-token'
+                    slackSend channel: '#ci-devops', message: "Trivy scan concluído.", tokenCredentialId: 'slack-token'
                 }
             }
         }
@@ -59,14 +68,11 @@ pipeline {
         stage('Test in Containers') {
             steps {
                 slackSend channel: '#ci-devops', message: "Subindo containers para testes...", tokenCredentialId: 'slack-token'
-
                 sh """
                     docker rm -f web1 web2 web3 db nginx || true
                     docker compose -f ${COMPOSE_FILE} up -d
-
                     sleep 5
                     curl -I http://localhost || exit 1
-
                     docker compose -f ${COMPOSE_FILE} down
                 """
             }
@@ -75,7 +81,6 @@ pipeline {
         stage('Deploy to Production') {
             steps {
                 slackSend channel: '#ci-devops', message: "Deploy em produção iniciado...", tokenCredentialId: 'slack-token'
-
                 sh """
                     docker compose pull
                     docker compose up -d
