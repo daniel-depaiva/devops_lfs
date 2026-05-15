@@ -19,13 +19,13 @@ pipeline {
             steps {
                 sh 'echo "Checking out repository..."'
                 checkout scm
-                slackSend channel: '#devops', message: "Checkout iniciado", tokenCredentialId: 'slack-token'
+                slackSend channel: '#ci-devops', message: "Checkout iniciado", tokenCredentialId: 'slack-token'
             }
         }
 
         stage('Build Images') {
             steps {
-                slackSend channel: '#devops', message: "Build das imagens iniciado", tokenCredentialId: 'slack-token'
+                slackSend channel: '#ci-devops', message: "Build das imagens iniciado", tokenCredentialId: 'slack-token'
 
                 script {
                     docker.withRegistry("https://${REGISTRY}", 'dockerhub') {
@@ -39,7 +39,7 @@ pipeline {
 
         stage('Security Scan (Trivy)') {
             steps {
-                slackSend channel: '#devops', message: "Rodando Trivy Scan...", tokenCredentialId: 'slack-token'
+                slackSend channel: '#ci-devops', message: "Rodando Trivy Scan...", tokenCredentialId: 'slack-token'
 
                 sh """
                     trivy image ${IMAGE_WEB}   --severity HIGH,CRITICAL --exit-code 0 --format json --output trivy-web.json
@@ -50,14 +50,14 @@ pipeline {
             post {
                 always {
                     archiveArtifacts artifacts: 'trivy-*.json', fingerprint: true
-                    slackSend channel: '#devops', message: "Trivy scan concluído. Relatórios disponíveis nos artefatos.", tokenCredentialId: 'slack-token'
+                    slackSend channel: '#ci-devops', message: "Trivy scan concluído. Relatórios disponíveis nos artefatos.", tokenCredentialId: 'slack-token'
                 }
             }
         }
 
         stage('Test in Containers') {
             steps {
-                slackSend channel: '#devops', message: "Subindo containers para testes...", tokenCredentialId: 'slack-token'
+                slackSend channel: '#ci-devops', message: "Subindo containers para testes...", tokenCredentialId: 'slack-token'
 
                 sh """
                     docker rm -f web1 web2 web3 db nginx || true
@@ -73,7 +73,7 @@ pipeline {
 
         stage('Deploy to Production') {
             steps {
-                slackSend channel: '#devops', message: "Deploy em produção iniciado...", tokenCredentialId: 'slack-token'
+                slackSend channel: '#ci-devops', message: "Deploy em produção iniciado...", tokenCredentialId: 'slack-token'
 
                 sh """
                     docker compose pull
@@ -85,10 +85,10 @@ pipeline {
 
     post {
         success {
-            slackSend channel: '#devops', message: "Pipeline finalizado com sucesso! Build #${BUILD_NUMBER}", tokenCredentialId: 'slack-token'
+            slackSend channel: '#ci-devops', message: "Pipeline finalizado com sucesso! Build #${BUILD_NUMBER}", tokenCredentialId: 'slack-token'
         }
         failure {
-            slackSend channel: '#devops', message: "Pipeline falhou! Verifique o console. Build #${BUILD_NUMBER}", tokenCredentialId: 'slack-token'
+            slackSend channel: '#ci-devops', message: "Pipeline falhou! Verifique o console. Build #${BUILD_NUMBER}", tokenCredentialId: 'slack-token'
         }
     }
 }
