@@ -3,12 +3,12 @@ pipeline {
 
     environment {
         TAG         = "latest"
-        REGISTRY    = "${env.REGISTRY_URL}"
-
-        IMAGE_WEB   = "${env.IMAGE_WEB}:${TAG}"
-        IMAGE_DB    = "${env.IMAGE_DB}:${TAG}"
-        IMAGE_NGINX = "${env.IMAGE_NGINX}:${TAG}"
-
+        // Aqui você deve usar o nome exato que está no print (REGISTRY)
+        REGISTRY     = "${env.REGISTRY}"
+        // Mantenha as outras variáveis..
+        IMAGE_WEB    = "${env.IMAGE_WEB}:${TAG}"
+        IMAGE_DB     = "${env.IMAGE_DB}:${TAG}"
+        IMAGE_NGINX  = "${env.IMAGE_NGINX}:${TAG}"
         COMPOSE_FILE = "${env.COMPOSE_FILE}"
 
     }
@@ -28,6 +28,7 @@ pipeline {
                 slackSend channel: '#ci-devops', message: "Build das imagens iniciado", tokenCredentialId: 'slack-token'
 
                 script {
+                    //docker.withRegistry("https://${REGISTRY}", 'dockerhub') {
                     docker.withRegistry("https://${REGISTRY}", 'dockerhub') {
                         docker.build(IMAGE_WEB,   "-f Dockerfileweb .").push()
                         docker.build(IMAGE_DB,    "-f Dockerfiledb .").push()
