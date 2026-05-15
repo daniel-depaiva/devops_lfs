@@ -2,12 +2,17 @@ pipeline {
     agent any
 
     environment {
+        // Namespace do seu Docker Hub
+        DOCKER_USER  = "danielprodrigues"
         TAG          = "latest"
-        // Removi o REGISTRY aqui para evitar o erro de 'null'
-        IMAGE_WEB    = "${env.IMAGE_WEB}:${TAG}"
-        IMAGE_DB     = "${env.IMAGE_DB}:${TAG}"
-        IMAGE_NGINX  = "${env.IMAGE_NGINX}:${TAG}"
-        COMPOSE_FILE = "${env.COMPOSE_FILE}"
+        
+        // Definição clara das imagens evitando o erro 'null'
+        IMAGE_WEB    = "${DOCKER_USER}/web:${TAG}"
+        IMAGE_DB     = "${DOCKER_USER}/db:${TAG}"
+        IMAGE_NGINX  = "${DOCKER_USER}/nginx:${TAG}"
+        
+        // Caminho padrão do seu arquivo compose (ajuste se estiver em outra pasta)
+        COMPOSE_FILE = "docker-compose.yml" 
     }
 
     stages {
@@ -24,7 +29,7 @@ pipeline {
                 slackSend channel: '#ci-devops', message: "Build das imagens iniciado", tokenCredentialId: 'slack-token'
 
                 script {
-                    // Usando string vazia '' o Jenkins assume o Docker Hub oficial corretamente
+                    // O ID 'dockerhub' deve ser o ID da credencial criada no Jenkins (Username with password)
                     docker.withRegistry('', 'dockerhub') {
                         docker.build(IMAGE_WEB,   "-f Dockerfileweb .").push()
                         docker.build(IMAGE_DB,    "-f Dockerfiledb .").push()
@@ -73,11 +78,11 @@ pipeline {
                 slackSend channel: '#ci-devops', message: "Deploy em produção iniciado...", tokenCredentialId: 'slack-token'
 
                 script {
-                    // Envolvi o pull em um registry login caso as imagens sejam privadas
                     docker.withRegistry('', 'dockerhub') {
+                        // Garantindo que o compose use o arquivo correto no deploy
                         sh """
-                            docker compose pull
-                            docker compose up -d
+                            docker compose -f ${COMPOSE_FILE} pull
+                            docker compose -f ${COMPOSE_FILE} up -d
                         """
                     }
                 }
