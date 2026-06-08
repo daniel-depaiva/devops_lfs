@@ -1,1 +1,3 @@
 .vagrant/
+terraform/aws/.terraform/
+terraform/docker/.terraform
